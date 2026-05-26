@@ -1,0 +1,35 @@
+services:
+  backend:
+    image: arenax/backend:latest
+    build:
+      context: ../GameBackend
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgres://arenax:arenax@db:5432/arenax
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  frontend:
+    image: arenax/frontend:latest
+    build:
+      context: ../Frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=arenax
+      - POSTGRES_PASSWORD=arenax
+      - POSTGRES_DB=arenax
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  pgdata:
