@@ -21,6 +21,21 @@ Frontend ──► NGINX (reverse proxy)
 - **nginx/** — reverse proxy configuration
 - **docs/** — deployment documentation
 
+## Repository Structure
+
+```
+.github/
+  workflows/
+    ci.yml              # CI pipeline
+docker-compose.yml      # Local dev stack
+kubernetes/
+  deployment.yaml       # Backend deployment manifest
+nginx/
+  default.conf          # Reverse proxy configuration
+docs/
+  deployment.md         # Deployment guide
+```
+
 ## Status
 
 Initial setup. Manifests and pipelines are being scaffolded incrementally.
