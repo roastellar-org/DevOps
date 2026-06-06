@@ -1,20 +1,29 @@
 services:
   backend:
-    image: arenax/backend:latest
+    image: arenax/backend:0.1.0
     build:
       context: ../GameBackend
+      dockerfile: Dockerfile.backend
     ports:
       - "3000:3000"
-    environment:
-      - DATABASE_URL=postgres://arenax:arenax@db:5432/arenax
+    env_file:
+      - .env
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     restart: unless-stopped
 
   frontend:
-    image: arenax/frontend:latest
+    image: arenax/frontend:0.1.0
     build:
       context: ../Frontend
+      dockerfile: Dockerfile.frontend
     ports:
       - "8080:80"
     depends_on:
@@ -23,12 +32,15 @@ services:
 
   db:
     image: postgres:16-alpine
-    environment:
-      - POSTGRES_USER=arenax
-      - POSTGRES_PASSWORD=arenax
-      - POSTGRES_DB=arenax
+    env_file:
+      - .env
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arenax -d arenax"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
 volumes:
