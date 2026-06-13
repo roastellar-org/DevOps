@@ -1,0 +1,52 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+          - production
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment != '' && inputs.environment || (startsWith(github.ref, 'refs/tags/') && 'production' || 'staging') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.30.0
+
+      - name: Configure kubeconfig
+        run: |
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+
+      - name: Apply namespace and core manifests
+        run: kubectl apply -f kubernetes/namespace.yaml -f kubernetes/secrets.yaml -f kubernetes/configmap.yaml
+
+      - name: Apply application manifests
+        run: kubectl apply -f kubernetes/ --recursive --exclude=namespace.yaml --exclude=secrets.yaml --exclude=configmap.yaml
+
+      - name: Wait for backend rollout
+        run: kubectl rollout status deployment/arenax-backend -n arenax --timeout=5m
+
+      - name: Wait for frontend rollout
+        run: kubectl rollout status deployment/arenax-frontend -n arenax --timeout=5m
+
+      - name: Verify ingress
+        run: kubectl get ingress arenax-ingress -n arenax -o wide
