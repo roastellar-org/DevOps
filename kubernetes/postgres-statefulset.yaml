@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: arenax-postgres
+  namespace: arenax
+spec:
+  serviceName: arenax-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: arenax-postgres
+  template:
+    metadata:
+      labels:
+        app: arenax-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: "arenax"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: arenax-secrets
+                  key: database-password
+            - name: POSTGRES_DB
+              value: "arenax"
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: pgdata
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 20Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: arenax-postgres
+  namespace: arenax
+spec:
+  selector:
+    app: arenax-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+  clusterIP: None
