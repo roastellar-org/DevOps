@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: arenax-frontend
+  namespace: arenax
+  labels:
+    app: arenax-frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: arenax-frontend
+  template:
+    metadata:
+      labels:
+        app: arenax-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: ghcr.io/roastellar/arenax-frontend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+              name: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: arenax-frontend
+  namespace: arenax
+spec:
+  selector:
+    app: arenax-frontend
+  ports:
+    - port: 80
+      targetPort: http
+  type: ClusterIP
