@@ -1,0 +1,52 @@
+groups:
+  - name: arenax-alerts
+    rules:
+      - alert: BackendHighErrorRate
+        expr: |
+          rate(http_requests_total{status=~"5.."}[5m])
+          / clamp_min(rate(http_requests_total[5m]), 1e-6)
+          > 0.05
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backend error rate above 5%"
+          description: "Error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+      - alert: InstanceDown
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Instance {{ $labels.instance }} is down"
+
+      - alert: HighRequestLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
+          > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 latency above 1s"
+
+      - alert: DiskSpaceLow
+        expr: |
+          node_filesystem_avail_bytes{fstype!="",mountpoint!~"/etc/.*"} 
+          / node_filesystem_size_bytes{fstype!=""} < 0.15
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk usage above 85% on {{ $labels.mountpoint }}"
+
+      - alert: CPUThrottlingHigh
+        expr: |
+          sum by (container) (rate(container_cpu_cfs_throttled_periods_total[5m]))
+          / sum by (container) (rate(container_cpu_cfs_periods_total[5m])) > 0.25
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container CPU throttling above 25%"
