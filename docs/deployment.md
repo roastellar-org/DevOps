@@ -1,43 +1,70 @@
 # ArenaX Deployment Guide
 
-High-level overview of how the ArenaX platform is intended to be deployed.
+Complete overview of the ArenaX deployment architecture and operational flow.
 
 ## Deployment Flow
 
 1. Developers push code to the `GameBackend` and `Frontend` repositories.
-2. GitHub Actions builds and tests each service, then publishes container images to the container registry.
-3. Images are deployed to a Kubernetes cluster via `kubectl` (manifests in `kubernetes/`).
-4. NGINX (`nginx/default.conf`) acts as the public entry point and reverse proxies requests to the backend API and frontend.
+2. GitHub Actions runs the **Test** pipeline (lint, unit tests, build) on every push.
+3. The **Build** pipeline publishes container images to GHCR (`ghcr.io/roastellar`).
+4. The **Deploy** pipeline applies Kubernetes manifests to the cluster.
+5. NGINX terminates TLS and reverse proxies traffic to the backend API and frontend.
+6. Prometheus scrapes metrics; Grafana renders dashboards; alerts page the on-call engineer.
 
-## CI/CD Pipeline
+## CI/CD Pipelines
 
-- `.github/workflows/ci.yml` runs on every push to `main` and on pull requests.
-- Pipeline stages: install dependencies → lint → build.
-- Follow-up stages (test, publish, deploy) are planned.
+All workflows live in `.github/workflows/`:
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `build.yml` | push to main, tags, PRs | Docker builds, GHCR publishing |
+| `test.yml` | push to main, PRs | Lint, unit tests, build (with ephemeral Postgres) |
+| `deploy.yml` | manual dispatch, version tags | `kubectl apply` + rollout verification |
+
+Deployments target two environments:
+
+- **staging** — every push to `main`
+- **production** — version tags (`v*`) and manual dispatch
 
 ## Docker
 
-- `docker-compose.yml` defines the local development stack:
-  - **backend** — ArenaX API (Express)
-  - **frontend** — web client
-  - **db** — PostgreSQL
+- `Dockerfile.backend` — multi-stage Node.js build (deps → compile → slim runtime)
+- `Dockerfile.frontend` — static build served by NGINX
+- `docker-compose.yml` — local development stack with healthchecks and env templates
+- `docker-compose.prod.yml` — production stack including the NGINX gateway
+
+## Infrastructure (Terraform)
+
+- `terraform/provider.tf` — AWS provider, S3 remote state, DynamoDB locking
+- `terraform/main.tf` — VPC (2 AZs, NAT gateway) and EKS cluster with managed node groups
+- `terraform/variables.tf` / `outputs.tf` — environment-driven configuration
 
 ## Kubernetes
 
-- `kubernetes/deployment.yaml` contains a sample Deployment and Service for the backend.
-- Deployment runs 2 replicas with resource requests/limits.
-- Database credentials are injected from a Kubernetes Secret.
+All manifests are in `kubernetes/`, applied to the `arenax` namespace:
+
+- `namespace.yaml` — namespace, resource quota, limit range
+- `secrets.yaml` / `configmap.yaml` — configuration injection
+- `backend-deployment.yaml` / `frontend-deployment.yaml` — workloads with probes and resource limits
+- `postgres-statefulset.yaml` — persistent database with PVC
+- `ingress.yaml` — NGINX ingress with TLS
+- `production/` — production-specific overrides (cert-manager, rate limits)
+
+## Monitoring
+
+- `monitoring/prometheus/prometheus.yml` — scrape configs for pods, API server, node exporter
+- `monitoring/prometheus/alert-rules.yml` — error rate, latency, disk, CPU throttling alerts
+- `monitoring/grafana/` — provisioned datasource and ArenaX backend dashboard
+- `monitoring/node-exporter.yaml` — host metrics DaemonSet
 
 ## NGINX
 
-- `nginx/default.conf` configures the reverse proxy:
-  - `/api/*` routes to the backend service.
-  - `/` routes to the frontend.
-  - Standard proxy headers are forwarded.
+- `nginx/nginx.conf` — main configuration (workers, gzip, logging)
+- `nginx/default.conf` — TLS listener, backend upstream, security headers
+- `nginx/ssl.conf` — HTTP→HTTPS redirect with ACME challenge passthrough
 
-## Planned Work
+## Bug Fixes
 
-- TLS/HTTPS termination.
-- Horizontal Pod Autoscaling.
-- Monitoring and log aggregation (Prometheus + Grafana).
-- Terraform manifests for cloud infrastructure.
+- Backend startup race condition resolved with an init container (see git history).
+- Readiness probe corrected to the `/health` endpoint.
+- CI cache keys fixed to invalidate on dependency changes.
