@@ -7,6 +7,10 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAMESPACE: roastellar
@@ -29,14 +33,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -50,16 +46,11 @@ jobs:
           context: services/backend
           file: devops/Dockerfile.backend
           push: ${{ github.event_name != 'pull_request' }}
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/arenax-backend:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/arenax-backend:${{ github.sha }}
-
-      - name: Move cache
-        run: |
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
   frontend:
     runs-on: ubuntu-latest
@@ -78,14 +69,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -101,13 +84,8 @@ jobs:
           build-args: |
             VITE_API_URL=https://api.arenax.gg/api
           push: ${{ github.event_name != 'pull_request' }}
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/arenax-frontend:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/arenax-frontend:${{ github.sha }}
-
-      - name: Move cache
-        run: |
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
