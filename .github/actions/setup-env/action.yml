@@ -1,0 +1,22 @@
+name: Setup Node.js environment
+description: Shared Node.js toolchain setup for ArenaX services
+
+inputs:
+  working-directory:
+    description: Service directory containing package.json
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: npm
+        cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+
+    - name: Install dependencies
+      working-directory: ${{ inputs.working-directory }}
+      shell: bash
+      run: npm ci
